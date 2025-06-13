@@ -6,7 +6,7 @@ import pandas as pd
 app = FastAPI()
 
 # Load the model
-model = joblib.load("random_forest_model.pkl")
+model = joblib.load("random_forest_model.pkl")  #you can change the model name from models folder
 
 # Define the Passenger schema
 class Passenger(BaseModel):

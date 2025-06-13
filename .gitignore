@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store # macOS specific
+**/.DS_Store
+.env
+venv/
+.pytest_cache/
+*.log
+
+# Data
+data/processed/  # If these can be regenerated, don't commit large ones
+models/          # If models are very large, consider DVC for versioning
+
+.idea/

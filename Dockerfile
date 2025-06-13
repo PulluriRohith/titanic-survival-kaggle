@@ -7,11 +7,14 @@ WORKDIR /app
 # Copy the current directory contents into the container
 COPY . /app
 
+# Copy the requirements file into the container
+COPY requirements.txt /app/
+
 # Install required Python packages
-RUN pip install --no-cache-dir fastapi uvicorn pandas scikit-learn joblib
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Expose the port the app runs on
-EXPOSE 8000
+EXPOSE 8001
 
 # Run the application
 CMD ["uvicorn", "app:app", "--host", "127.0.0.1", "--port", "8001"]
