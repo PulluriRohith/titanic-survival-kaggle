@@ -1,20 +1,20 @@
-# Use an official Python runtime as a parent image
-FROM python:3.9-slim
+FROM python:3.12-slim
 
-# Set the working directory
+# Set working directory
 WORKDIR /app
 
-# Copy the current directory contents into the container
-COPY . /app
-
-# Copy the requirements file into the container
-COPY requirements.txt /app/
-
-# Install required Python packages
+# Copy requirements and install dependencies
+COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose the port the app runs on
+# Copy source code and model bundle
+COPY src/*.py ./
+COPY models ./models
+COPY models /models
+
+# Expose the FastAPI port
 EXPOSE 8001
 
-# Run the application
-CMD ["uvicorn", "app:app", "--host", "127.0.0.1", "--port", "8001"]
+# Default command
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
+
