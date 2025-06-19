@@ -3,7 +3,7 @@ import numpy as np
 
 DROP_COLS = [
     'PassengerId', 'Name', 'Ticket', 'Cabin',
-    'SibSp', 'Parch', 'Fare', 'HasCabin', 'Deck'
+    'SibSp', 'Parch', 'HasCabin', 'Deck'
 ]
 
 gender_mapping   = {'male': 0, 'female': 1}
@@ -16,7 +16,7 @@ def preprocess_titanic_survival(df: pd.DataFrame, stats: dict | None = None):
     df = df.copy()
     fitting = stats is None
 
-    # --- 1. Extract & map Title ---
+    # 1) Title extraction and mapping
     df['Title'] = (
         df['Name']
           .str.extract(r' ([A-Za-z]+)\.', expand=False)
@@ -25,60 +25,67 @@ def preprocess_titanic_survival(df: pd.DataFrame, stats: dict | None = None):
           .map(title_mapping)
     )
 
-    # --- 2. FamilySize & IsAlone ---
-    df['FamilySize'] = df['SibSp'] + df['Parch'] + 1
+    # 2) FamilySize & IsAlone
+    df['FamilySize'] = df['SibSp'].fillna(0) + df['Parch'].fillna(0) + 1
     df['IsAlone']    = (df['FamilySize'] == 1).astype(int)
 
-    # --- 3. FareBin & FarePerPerson ---
+    # 3) Fare impute (if needed)
     if fitting:
-        stats = {}  # initialize on first call
-        # record quantile‐bin edges for Fare
-        stats['fare_bins'] = pd.qcut(
-            df['Fare'].fillna(0), 4, retbins=True
-        )[1]
-    df['FareBin']       = pd.cut(
-                             df['Fare'].fillna(0),
-                             bins=stats['fare_bins'],
-                             labels=False,
-                             include_lowest=True
-                         ).astype(int)
+        stats = {}
+        stats['fare_median'] = df['Fare'].median()
+        stats['fare_bins'] = pd.qcut(df['Fare'].fillna(stats['fare_median']), 4, retbins=True)[1]
+    df['Fare'] = df['Fare'].fillna(stats['fare_median'])
+
+    # 4) FareBin & FarePerPerson
+    df['FareBin'] = pd.cut(
+        df['Fare'],
+        bins=stats['fare_bins'],
+        labels=False,
+        include_lowest=True
+    ).astype(int)
     df['FarePerPerson'] = df['Fare'] / df['FamilySize']
 
-    # --- 4. Embarked ---
+    # 5) Embarked mapping
     df['Embarked'] = df['Embarked'].map(embarked_mapping).fillna(-1).astype(int)
 
-    # --- 5. Deck processing ---
+    # 6) Deck extraction, imputation, and ordinal encoding
     df['Deck'] = df['Cabin'].str[0].fillna('Unknown')
     if fitting:
-        # build deck‐mode lookup from training set
         stats['deck_mode'] = (
-            df[df['Deck']!='Unknown']
+            df[df['Deck'] != 'Unknown']
               .groupby('Pclass')['Deck']
               .agg(lambda x: x.mode().iat[0])
               .to_dict()
         )
     df['Deck'] = df.apply(
         lambda r: stats['deck_mode'].get(r['Pclass'], 'Unknown')
-                  if r['Deck']=='Unknown' else r['Deck'],
+                  if r['Deck'] == 'Unknown' else r['Deck'],
         axis=1
     )
+    # Remove rows where Deck is 'T'
+    df = df[df['Deck'] != 'T']
+    # Merge decks 'D' and 'E' into 'DE'
+    df['Deck'] = df['Deck'].replace({'D': 'DE', 'E': 'DE'})
     df['Deck_Ordinal'] = df['Deck'].map(deck_ord_mapping).fillna(0).astype(int)
 
-    # --- 6. Sex mapping ---
+    # 7) Sex mapping
     df['Sex'] = df['Sex'].map(gender_mapping).fillna(0).astype(int)
 
-    # --- 7. Age impute & bin ---
+    # 8) Age impute & bin
     if fitting:
         stats['age_mean'] = df['Age'].mean()
-    df['Age']    = df['Age'].fillna(stats['age_mean'])
+    df['Age'] = df['Age'].fillna(stats['age_mean'])
     df['AgeBin'] = pd.cut(
-                      df['Age'],
-                      bins=[0,12,18,35,60,80],
-                      labels=False,
-                      include_lowest=True
-                  ).astype(int)
+        df['Age'],
+        bins=[0, 12, 18, 35, 60, 80],
+        labels=False,
+        include_lowest=True
+    ).astype(int)
 
-    # --- 8. Drop unused columns ---
+    # 9) Drop unused columns
     df.drop(columns=[c for c in DROP_COLS if c in df], inplace=True)
+
+    # 10) Zero-fill any leftover NaNs
+    df = df.fillna(0)
 
     return df, stats

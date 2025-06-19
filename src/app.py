@@ -1,35 +1,69 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-import joblib
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, validator
+from typing import Optional, Union
 import pandas as pd
+import joblib
 
-app = FastAPI()
+from data_preprocess import preprocess_titanic_survival
 
-# Load the model
-model = joblib.load("random_forest_model.pkl")  #you can change the model name from models folder
+# Load model bundle (adjust path if needed)
+bundle = joblib.load("../models/logreg_model.joblib")
+model = bundle["model"]
+stats = bundle["stats"]
+columns = bundle["columns"]
 
-# Define the Passenger schema
+# Define request/response schemas
 class Passenger(BaseModel):
     Pclass: int
-    Sex: int
     Fare: float
+    Sex: Union[str, int] = 'male'
+    Name: Optional[str] = 'Mr. Unknown'
+    Age: Optional[float] = None
+    SibSp: Optional[int] = 0
+    Parch: Optional[int] = 0
+    Ticket: Optional[str] = ''
+    Cabin: Optional[str] = ''
+    Embarked: Optional[str] = 'S'
 
-@app.get("/")
-async def read_root():
-    return {"message": "Welcome to the Titanic Prediction API"}
+    @validator('Sex', pre=True)
+    def parse_sex(cls, v):
+        if isinstance(v, int):
+            return 'male' if v == 0 else 'female'
+        return v
 
-@app.post("/predict")
-async def predict(passenger: Passenger):
-    # Corrected variable name
-    input_data = pd.DataFrame([passenger.dict()])
+    @validator('Embarked', pre=True)
+    def parse_embarked(cls, v):
+        if isinstance(v, int):
+            # map 0->S, 1->C, 2->Q
+            return {0:'S',1:'C',2:'Q'}.get(v, 'S')
+        return v
 
-    # Make prediction
-    prediction = model.predict(input_data)
+class PredictionResponse(BaseModel):
+    survived: int
 
-    return {
-        "prediction": int(prediction[0])
-    }
+# Create FastAPI app
+app = FastAPI()
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+
+@app.post("/predict", response_model=PredictionResponse)
+def predict(passenger: Passenger):
+    # Convert input to DataFrame
+    df = pd.DataFrame([passenger.dict()])
+    try:
+        # Preprocess using saved stats
+        df_proc, _ = preprocess_titanic_survival(df, stats)
+        # One-hot & align features to training columns
+        X = pd.get_dummies(df_proc, dtype=float)
+        X = X.reindex(columns=columns, fill_value=0)
+        # Predict
+        prediction = model.predict(X)[0]
+        return PredictionResponse(survived=int(prediction))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8001)
+    uvicorn.run("app:app", host="0.0.0.0", port=8001, reload=True)
