@@ -4,6 +4,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import OrdinalEncoder
+from sklearn.impute import SimpleImputer
 
 # 1) Custom Transformers
 class TitleExtractor(BaseEstimator, TransformerMixin):
@@ -47,14 +48,17 @@ class DeckImputer(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         X = X.copy()
+        # initial deck letter or Unknown
         X['Deck0'] = X['Cabin'].str[0].fillna('Unknown')
+        # impute Unknown by Pclass
         X['Deck0'] = X.apply(
             lambda r: self.deck_mode_.get(r['Pclass'], 'Unknown')
                       if r['Deck0']=='Unknown' else r['Deck0'],
             axis=1
         )
-        X = X[X['Deck0']!='T']
-        X['Deck0'] = X['Deck0'].replace({'D':'DE','E':'DE'})
+        # treat 'T' as Unknown as well
+        X['Deck0'] = X['Deck0'].replace({'T':'Unknown', 'D':'DE','E':'DE'})
+        # ordinal encode, Unknown->0
         X['DeckOrdinal'] = X['Deck0'].map(self.deck_order).fillna(0).astype(int)
         return X.drop(columns=['Cabin','Deck0'])
 
@@ -69,41 +73,40 @@ class FeatureEngineer(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         X = X.copy()
-        # Impute
-        X['Age'] = X['Age'].fillna(self.age_median_)
+        # Impute continuous
+        X['Age']  = X['Age'].fillna(self.age_median_)
         X['Fare'] = X['Fare'].fillna(self.fare_median_)
-        # Features
+        # Engineered
         X['FarePerPerson'] = X['Fare'] / X['FamilySize']
         X['FareBin'] = pd.cut(
-            X['Fare'],
-            bins=self.fare_bins_,
-            labels=False,
-            include_lowest=True
+            X['Fare'], bins=self.fare_bins_, labels=False, include_lowest=True
         ).astype(int)
         X['AgeBin'] = pd.cut(
-            X['Age'],
-            bins=[0,12,18,35,60,80],
-            labels=False,
-            include_lowest=True
+            X['Age'], bins=[0,12,18,35,60,80], labels=False, include_lowest=True
         ).astype(int)
         return X
 
-# 2) ColumnTransformer Setup
-agg_cols = ['FamilySize','IsAlone','FarePerPerson','AgeBin','FareBin','DeckOrdinal']
-
+# 2) Encoding Pipelines
 sex_encoder = OrdinalEncoder(categories=[['male','female']], dtype=int)
-embarked_encoder = OrdinalEncoder(categories=[['S','C','Q']], dtype=int)
-title_encoder = OrdinalEncoder(categories=[[[1,2,3,4,5]]], dtype=int)
+embarked_pipeline = Pipeline([
+    ('imputer', SimpleImputer(strategy='most_frequent')),
+    ('encoder', OrdinalEncoder(categories=[['S','C','Q']], dtype=int))
+])
+title_pipeline = Pipeline([
+    ('imputer', SimpleImputer(strategy='constant', fill_value=0)),
+    ('encoder', OrdinalEncoder(categories=[[0,1,2,3,4,5]], dtype=int))
+])
 
+# 3) Column Transformer
+agg_cols = ['FamilySize','IsAlone','FarePerPerson','AgeBin','FareBin','DeckOrdinal']
 preprocessor = ColumnTransformer(transformers=[
-    ('sex_ord',     sex_encoder,      ['Sex']),
-    ('embarked_ord',embarked_encoder, ['Embarked']),
-    ('title_ord',   title_encoder,    ['Title']),
-    ('pass_agg',    'passthrough',    agg_cols),
+    ('sex_ord',      sex_encoder,       ['Sex']),
+    ('embarked_ord', embarked_pipeline, ['Embarked']),
+    ('title_ord',    title_pipeline,    ['Title']),
+    ('pass_agg',     'passthrough',     agg_cols),
 ], remainder='drop')
 
-# 3) Full Pipeline
-
+# 4) Full Pipeline
 titanic_pipeline = Pipeline([
     ('title',    TitleExtractor()),
     ('family',   FamilySizeAdder()),
