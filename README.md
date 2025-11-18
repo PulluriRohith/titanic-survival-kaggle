@@ -7,14 +7,17 @@ It covers data preprocessing, model training, evaluation, and FastAPI-based depl
 
 ## Project Structure
 
-| Path / File                       | Description                                                      |
-|------------------------------------|------------------------------------------------------------------|
-| `src/model.py`                    | Trains the model (preprocessing, feature engineering, evaluation, artefact saving). |
-| `src/app.py`                      | FastAPI service exposing prediction endpoints.                   |
-| `src/data_preprocess.py`          | Reusable preprocessing pipeline (cleaning, encoding, feature engineering). |
-| `data/`                           | Holds `train.csv`, `test.csv`, and the generated `submission.csv`.|
-| `models/`                         | Stores the trained model and preprocessing artefacts (`logreg_model.joblib`). |
-| `README.md`                       | Project documentation (this file).                               |
+| Path / File              | Description                                                                                                                             |
+|--------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|
+| `src/model.py`           | Trains the model (preprocessing, feature engineering, evaluation, artefact saving). submission csv file generated for kaggle submission |
+| `src/app.py`             | FastAPI service exposing prediction endpoints.                                                                                          |
+| `src/data_preprocess.py` | Reusable preprocessing pipeline (cleaning, encoding, feature engineering).                                                              |
+| `src/pipeline.py`        | Reusable sklearn pipeline with custom transformers                                                                                      |
+| `src/train.py`           | Trains the model for sklearn pipeline                                                                                                   |
+| `src/app_pipeline.py`    | FastAPI service exposing prediction endpoints for sklearn pipeline                                                                      |
+| `data/`                  | Holds `train.csv`, `test.csv`, and the generated `submission.csv`.                                                                      |
+| `models/`                | Stores the trained model and preprocessing artefacts (`logreg_model.joblib`).                                                           |
+| `README.md`              | Project documentation (this file).                                                                                                      |
 
 ---
 
@@ -73,6 +76,44 @@ The API is then available at [http://localhost:8000](http://localhost:8000)
 ```
 
 ---
+
+
+**1 — Train the model based on sklearn pipeline (alternate way)**
+```bash
+python src/train.py (based on sklearn pipeline)
+```
+
+**2 — Launch the FastAPI server**
+```bash
+python src/app_pipeline.py
+```
+The API is then available at [http://localhost:8001](http://localhost:8001)
+
+---
+
+## API Endpoints
+
+| Method | Path      | Purpose                                  |
+|--------|-----------|------------------------------------------|
+| POST   | `/predict`| Predict survival from passenger features |
+
+**Example payload for `/predict`:**
+```json
+{
+  "Pclass": 3,
+  "Fare": 7.25,
+  "Sex": "male",
+  "Age": 22,
+  "SibSp": 1,
+  "Parch": 0,
+  "Ticket": "A/5 21171",
+  "Cabin": "",
+  "Embarked": "S"
+}
+```
+
+---
+
 
 ## Outputs
 

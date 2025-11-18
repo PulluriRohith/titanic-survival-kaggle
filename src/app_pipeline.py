@@ -16,7 +16,7 @@ class Passenger(BaseModel):
     Fare: float
     Cabin: str = ""
     Embarked: str
-    Name: str
+
 
 app = FastAPI()
 
